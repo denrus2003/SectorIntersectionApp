@@ -7,88 +7,84 @@
 
 namespace Geometry {
 
-// Вычисление векторного (псевдо)произведения двух векторов
-inline qreal cross(const QPointF &a, const QPointF &b) {
+// Векторное произведение (скалярный аналог для 2D)
+constexpr inline qreal cross(const QPointF &a, const QPointF &b) noexcept {
     return a.x() * b.y() - a.y() * b.x();
 }
 
 // Скалярное произведение
-inline qreal dot(const QPointF &a, const QPointF &b) {
+constexpr inline qreal dot(const QPointF &a, const QPointF &b) noexcept {
     return a.x() * b.x() + a.y() * b.y();
 }
 
-// Поворот вектора v на угол angle (в радианах)
-inline QPointF rotate(const QPointF &v, qreal angle) {
-    qreal ca = qCos(angle);
-    qreal sa = qSin(angle);
-    return QPointF(v.x()*ca - v.y()*sa, v.x()*sa + v.y()*ca);
+// Поворот вектора на заданный угол (радианы)
+constexpr inline QPointF rotate(const QPointF &v, qreal angle) noexcept {
+    const qreal ca = qCos(angle);
+    const qreal sa = qSin(angle);
+    return {v.x() * ca - v.y() * sa, v.x() * sa + v.y() * ca};
 }
 
-// Структура, описывающая половинную плоскость (линия + внутренняя сторона)
+// Описание половинной плоскости (граница + внутренняя область)
 struct HalfPlane {
-    QPointF p;       // Точка на линии (начало координат для сектора)
-    QPointF normal;  // Единичный вектор, направленный во внутреннюю сторону
+    QPointF p;       // Точка на линии
+    QPointF normal;  // Единичный вектор внутрь области
+
+    [[nodiscard]] bool contains(const QPointF &point) const noexcept {
+        return dot(point - p, normal) >= 0;
+    }
 };
 
-// Проверка: принадлежит ли точка данной половинной плоскости
-inline bool isInside(const QPointF &point, const HalfPlane &hp) {
-    return dot(point - hp.p, hp.normal) >= 0;
-}
-
-// Функция для вычисления точки пересечения двух линий,
-// заданных в виде: p + t*r и q + u*s. Если линии параллельны – возвращается false.
+// Пересечение двух линий p + t*r и q + u*s. Возвращает true, если пересечение найдено.
 inline bool lineIntersection(const QPointF &p, const QPointF &r,
                              const QPointF &q, const QPointF &s,
-                             QPointF &intersection) {
-    qreal rxs = cross(r, s);
-    if (qFuzzyCompare(rxs, 0.0))
-        return false; // Линии параллельны
-    QPointF qp = q - p;
-    qreal t = cross(qp, s) / rxs;
+                             QPointF &intersection) noexcept {
+    const qreal rxs = cross(r, s);
+    if (qFuzzyCompare(rxs, 0.0)) return false; // Линии параллельны
+
+    const QPointF qp = q - p;
+    const qreal t = cross(qp, s) / rxs;
     intersection = p + r * t;
     return true;
 }
 
-// Алгоритм отсечения многоугольника половинной плоскостью
-// (реализация по методу Sutherland–Hodgman)
-inline QVector<QPointF> clipPolygonByHalfPlane(const QVector<QPointF> &poly, const HalfPlane &hp) {
+// Отсечение многоугольника половинной плоскостью (Sutherland–Hodgman)
+inline QVector<QPointF> clipPolygon(const QVector<QPointF> &poly, const HalfPlane &hp) {
+    if (poly.isEmpty()) return {};
+
     QVector<QPointF> newPoly;
-    if(poly.isEmpty())
-        return newPoly;
-    int n = poly.size();
-    for (int i = 0; i < n; ++i) {
-        QPointF current = poly[i];
-        QPointF prev = poly[(i + n - 1) % n];
-        bool currentInside = isInside(current, hp);
-        bool prevInside = isInside(prev, hp);
-        if (prevInside && currentInside) {
-            newPoly.append(current);
-        } else if (prevInside && !currentInside) {
-            QPointF direction = current - prev;
-            qreal t = - dot(prev - hp.p, hp.normal) / dot(direction, hp.normal);
-            QPointF intersectPoint = prev + direction * t;
-            newPoly.append(intersectPoint);
-        } else if (!prevInside && currentInside) {
-            QPointF direction = current - prev;
-            qreal t = - dot(prev - hp.p, hp.normal) / dot(direction, hp.normal);
-            QPointF intersectPoint = prev + direction * t;
-            newPoly.append(intersectPoint);
-            newPoly.append(current);
+    newPoly.reserve(poly.size());
+
+    QPointF prev = poly.last();
+    bool prevInside = hp.contains(prev);
+
+    for (const auto &current : poly) {
+        const bool currentInside = hp.contains(current);
+        if (prevInside != currentInside) {
+            const QPointF direction = current - prev;
+            const qreal denom = dot(direction, hp.normal);
+            if (!qFuzzyCompare(denom, 0.0)) { // Избегаем деления на 0
+                const qreal t = -dot(prev - hp.p, hp.normal) / denom;
+                newPoly.append(prev + direction * t);
+            }
         }
+        if (currentInside) newPoly.append(current);
+        prev = current;
+        prevInside = currentInside;
     }
     return newPoly;
 }
 
-// Вычисление площади многоугольника по формуле Гаусса (метод шевроле)
-inline qreal polygonArea(const QVector<QPointF> &poly) {
-    qreal area = 0;
-    int n = poly.size();
-    for (int i = 0; i < n; ++i) {
-        area += cross(poly[i], poly[(i+1) % n]);
+// Площадь многоугольника (метод Гаусса)
+inline qreal polygonArea(const QVector<QPointF> &poly) noexcept {
+    if (poly.size() < 3) return 0.0; // Многоугольник должен содержать минимум 3 точки
+
+    qreal area = 0.0;
+    for (int i = 0, n = poly.size(); i < n; ++i) {
+        area += cross(poly[i], poly[(i + 1) % n]);
     }
-    return qAbs(area) / 2.0;
+    return qAbs(area) * 0.5;
 }
 
-}
+} // namespace Geometry
 
 #endif
