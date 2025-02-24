@@ -5,7 +5,6 @@
 class TestSectorIntersection : public ::testing::Test {
 protected:
     void SetUp() override {
-        // Настройки перед тестом
     }
 };
 
