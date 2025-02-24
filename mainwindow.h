@@ -20,6 +20,7 @@ private:
     void setupUi();
     [[nodiscard]] QVector<QPointF> getInputPoints() const;
     [[nodiscard]] qreal getAngleInput() const;
+    [[nodiscard]] qreal getValidatedInput(QLineEdit *lineEdit, const QString &fieldName) const;
 
     QWidget *centralWidget;
     QLineEdit *lineEditAx;

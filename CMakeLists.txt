@@ -23,10 +23,10 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(SectorIntersectionApp
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
-        geometry.h geometry.cpp
-        sector.h sector.cpp
-        intersectioncalculator.h intersectioncalculator.cpp
-        visualizationwidget.h visualizationwidget.cpp
+        geometry.h
+        sector.h
+        intersectioncalculator.h
+        visualizationwidget.h
     )
 # Define target properties for Android with Qt 6 as:
 #    set_property(TARGET SectorIntersectionApp APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
